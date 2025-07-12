@@ -1,0 +1,124 @@
+# Production Docker Compose configuration
+# Use this file for production deployments
+
+version: '3.8'
+
+services:
+  # Backend service (wavesrv)
+  wavesrv:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        - GO_VERSION=1.23
+    container_name: waveterm-wavesrv-prod
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=waveterm
+      - POSTGRES_USER=waveterm
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-waveterm}
+      - WAVETERM_LOG_LEVEL=info
+    volumes:
+      - wavesrv_data:/data
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Database service
+  postgres:
+    image: postgres:15-alpine
+    container_name: waveterm-postgres-prod
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=waveterm
+      - POSTGRES_USER=waveterm
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-waveterm}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waveterm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Documentation service
+  docs:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.docs
+      args:
+        - NODE_VERSION=22
+    container_name: waveterm-docs-prod
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "3001:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Storybook service
+  storybook:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.storybook
+      args:
+        - NODE_VERSION=22
+    container_name: waveterm-storybook-prod
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "6006:6006"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6006"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: waveterm-nginx-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - wavesrv
+      - docs
+      - storybook
+    profiles:
+      - nginx
+
+volumes:
+  wavesrv_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge

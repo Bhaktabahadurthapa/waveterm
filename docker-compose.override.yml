@@ -1,0 +1,53 @@
+# Development-specific Docker Compose overrides
+# This file is automatically loaded by docker-compose and provides
+# development-specific configurations
+
+version: '3.8'
+
+services:
+  waveterm-dev:
+    environment:
+      - NODE_ENV=development
+      - WAVETERM_DEV_MODE=true
+      - WAVETERM_LOG_LEVEL=debug
+    volumes:
+      # Mount additional development files
+      - ./.vscode:/workspace/.vscode:ro
+      - ./.git:/workspace/.git:ro
+      - ./tmp:/workspace/tmp
+    # Enable development debugging
+    stdin_open: true
+    tty: true
+
+  wavesrv:
+    environment:
+      - WAVETERM_DEV_MODE=true
+      - WAVETERM_LOG_LEVEL=debug
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=waveterm
+      - POSTGRES_USER=waveterm
+      - POSTGRES_PASSWORD=waveterm
+    # Enable debugging
+    command: ["./dist/bin/wavesrv", "--dev", "--log-level", "debug"]
+
+  postgres:
+    # Development database settings
+    environment:
+      - POSTGRES_INITDB_ARGS=--auth-host=trust
+    # Enable logging
+    command: ["postgres", "-c", "log_statement=all"]
+
+  docs:
+    environment:
+      - NODE_ENV=development
+      - FAST_REFRESH=true
+    # Enable hot reload
+    command: ["yarn", "start", "--host", "0.0.0.0", "--port", "3000", "--hot"]
+
+  storybook:
+    environment:
+      - NODE_ENV=development
+      - FAST_REFRESH=true
+    # Enable hot reload
+    command: ["yarn", "storybook", "--host", "0.0.0.0", "--port", "6006", "--no-manager-cache"]

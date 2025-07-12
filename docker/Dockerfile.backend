@@ -1,0 +1,70 @@
+FROM golang:1.23-alpine AS builder
+
+# Build arguments
+ARG GO_VERSION=1.23
+
+# Install build dependencies
+RUN apk add --no-cache \
+    git \
+    gcc \
+    musl-dev \
+    sqlite-dev \
+    make
+
+# Install Zig for cross-compilation
+RUN wget https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz \
+    && tar -xf zig-linux-x86_64-0.13.0.tar.xz \
+    && mv zig-linux-x86_64-0.13.0 /usr/local/zig \
+    && ln -s /usr/local/zig/zig /usr/local/bin/zig \
+    && rm zig-linux-x86_64-0.13.0.tar.xz
+
+# Set working directory
+WORKDIR /build
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY cmd/ cmd/
+COPY pkg/ pkg/
+
+# Build the application
+RUN CGO_ENABLED=1 go build -tags "osusergo,sqlite_omit_load_extension" \
+    -ldflags "-X main.BuildTime=$(date +'%Y%m%d%H%M') -X main.WaveVersion=dev" \
+    -o /build/wavesrv \
+    cmd/server/main-server.go
+
+# Runtime stage
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    sqlite \
+    curl
+
+# Create non-root user
+RUN adduser -D -s /bin/sh waveterm
+
+# Copy binary from builder
+COPY --from=builder /build/wavesrv /usr/local/bin/wavesrv
+
+# Set up data directory
+RUN mkdir -p /data && chown waveterm:waveterm /data
+
+# Switch to non-root user
+USER waveterm
+WORKDIR /data
+
+# Expose ports
+EXPOSE 8080 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Start the server
+CMD ["wavesrv", "--data-dir", "/data"]
