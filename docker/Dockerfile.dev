@@ -1,0 +1,93 @@
+FROM ubuntu:24.04
+
+# Build arguments
+ARG GO_VERSION=1.23
+ARG NODE_VERSION=22
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # Basic tools
+    curl \
+    wget \
+    git \
+    build-essential \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    software-properties-common \
+    # For Wave Terminal build requirements
+    zip \
+    unzip \
+    # For cross-compilation
+    gcc-multilib \
+    g++-multilib \
+    # For packaging
+    fpm \
+    rpm \
+    # For development
+    vim \
+    nano \
+    htop \
+    jq \
+    # For GUI applications (if needed)
+    xvfb \
+    x11vnc \
+    fluxbox \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Zig compiler for static linking
+RUN wget https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz \
+    && tar -xf zig-linux-x86_64-0.13.0.tar.xz \
+    && mv zig-linux-x86_64-0.13.0 /usr/local/zig \
+    && ln -s /usr/local/zig/zig /usr/local/bin/zig \
+    && rm zig-linux-x86_64-0.13.0.tar.xz
+
+# Install Go
+RUN wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz \
+    && tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz \
+    && rm go${GO_VERSION}.linux-amd64.tar.gz
+
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
+    && apt-get install -y nodejs
+
+# Install Task
+RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+# Create developer user
+RUN useradd -m -s /bin/bash developer && \
+    echo "developer ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/developer && \
+    mkdir -p /home/developer/.config
+
+# Switch to developer user
+USER developer
+WORKDIR /home/developer
+
+# Set up environment variables
+ENV PATH="/usr/local/go/bin:/usr/local/zig:${PATH}"
+ENV GOPATH="/home/developer/go"
+ENV GOROOT="/usr/local/go"
+ENV PATH="${GOPATH}/bin:${PATH}"
+
+# Enable Corepack for Yarn
+RUN corepack enable
+
+# Create workspace directory
+RUN mkdir -p /workspace
+WORKDIR /workspace
+
+# Set up git configuration (can be overridden)
+RUN git config --global user.email "developer@waveterm.dev" && \
+    git config --global user.name "Wave Terminal Developer"
+
+# Expose common ports
+EXPOSE 3000 5173 6006 3001 8080 8081
+
+# Set up entrypoint
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sudo chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/bin/bash"]

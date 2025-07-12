@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # Main development environment with all dependencies
+  waveterm-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+      args:
+        - GO_VERSION=1.23
+        - NODE_VERSION=22
+    container_name: waveterm-dev
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+      - docs_node_modules:/workspace/docs/node_modules
+      - go_cache:/go/pkg/mod
+      - yarn_cache:/home/developer/.yarn/cache
+    working_dir: /workspace
+    environment:
+      - NODE_ENV=development
+      - WCLOUD_ENDPOINT=https://api-dev.waveterm.dev/central
+      - WCLOUD_WS_ENDPOINT=wss://wsapi-dev.waveterm.dev/
+    ports:
+      - "3000:3000"   # Vite dev server
+      - "5173:5173"   # Vite dev server (alternative)
+      - "6006:6006"   # Storybook
+      - "3001:3001"   # Docusaurus dev server
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # Backend service (wavesrv)
+  wavesrv:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        - GO_VERSION=1.23
+    container_name: waveterm-wavesrv
+    volumes:
+      - .:/workspace
+      - go_cache:/go/pkg/mod
+    working_dir: /workspace
+    environment:
+      - CGO_ENABLED=1
+    ports:
+      - "8080:8080"   # wavesrv HTTP API
+      - "8081:8081"   # wavesrv WebSocket
+    depends_on:
+      - postgres
+    command: ["./dist/bin/wavesrv", "--dev"]
+
+  # Database service
+  postgres:
+    image: postgres:15-alpine
+    container_name: waveterm-postgres
+    environment:
+      - POSTGRES_DB=waveterm
+      - POSTGRES_USER=waveterm
+      - POSTGRES_PASSWORD=waveterm
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+
+  # Documentation service
+  docs:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.docs
+      args:
+        - NODE_VERSION=22
+    container_name: waveterm-docs
+    volumes:
+      - ./docs:/workspace/docs
+      - docs_node_modules:/workspace/docs/node_modules
+    working_dir: /workspace/docs
+    ports:
+      - "3001:3000"   # Docusaurus dev server
+    command: ["yarn", "start", "--host", "0.0.0.0"]
+
+  # Storybook service
+  storybook:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.storybook
+      args:
+        - NODE_VERSION=22
+    container_name: waveterm-storybook
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+    working_dir: /workspace
+    ports:
+      - "6006:6006"   # Storybook
+    command: ["yarn", "storybook", "--host", "0.0.0.0"]
+
+  # Build service for packaging
+  builder:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.builder
+      args:
+        - GO_VERSION=1.23
+        - NODE_VERSION=22
+    container_name: waveterm-builder
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+      - go_cache:/go/pkg/mod
+      - yarn_cache:/home/developer/.yarn/cache
+    working_dir: /workspace
+    profiles:
+      - build
+    command: ["task", "package"]
+
+volumes:
+  node_modules:
+    driver: local
+  docs_node_modules:
+    driver: local
+  go_cache:
+    driver: local
+  yarn_cache:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge

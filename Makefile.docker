@@ -1,0 +1,84 @@
+# Docker-based Makefile for Wave Terminal
+# This provides Make targets for Docker operations
+
+.PHONY: docker-help docker-setup docker-dev docker-build docker-package docker-clean docker-shell docker-logs docker-status
+
+# Default target
+docker-help:
+	@echo "Docker targets for Wave Terminal:"
+	@echo ""
+	@echo "  docker-setup    - Set up Docker development environment"
+	@echo "  docker-dev      - Start development environment"
+	@echo "  docker-build    - Build Docker images"
+	@echo "  docker-package  - Build packages using Docker"
+	@echo "  docker-shell    - Open shell in development container"
+	@echo "  docker-logs     - Show logs for all services"
+	@echo "  docker-status   - Show status of all services"
+	@echo "  docker-clean    - Clean up Docker resources"
+	@echo "  docker-prod     - Start production environment"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make docker-setup   # Initial setup"
+	@echo "  make docker-dev     # Start development"
+	@echo "  make docker-package # Build packages"
+
+# Docker setup
+docker-setup:
+	@echo "Setting up Docker environment..."
+	@./scripts/docker-dev.sh setup
+
+# Start development environment
+docker-dev:
+	@echo "Starting development environment..."
+	@./scripts/docker-dev.sh dev
+
+# Build Docker images
+docker-build:
+	@echo "Building Docker images..."
+	@docker-compose build
+
+# Build packages using Docker
+docker-package:
+	@echo "Building packages using Docker..."
+	@./scripts/docker-dev.sh package
+
+# Open development shell
+docker-shell:
+	@echo "Opening development shell..."
+	@./scripts/docker-dev.sh shell
+
+# Show logs
+docker-logs:
+	@docker-compose logs -f
+
+# Show status
+docker-status:
+	@docker-compose ps
+
+# Clean up Docker resources
+docker-clean:
+	@echo "Cleaning up Docker resources..."
+	@./scripts/docker-dev.sh clean
+
+# Start production environment
+docker-prod:
+	@echo "Starting production environment..."
+	@./scripts/docker-dev.sh prod
+
+# Stop all services
+docker-down:
+	@echo "Stopping all services..."
+	@docker-compose down
+
+# Integration with existing Task system
+task-init-docker:
+	@echo "Initializing Docker environment..."
+	@./scripts/docker-dev.sh setup
+
+task-dev-docker:
+	@echo "Starting Docker development environment..."
+	@./scripts/docker-dev.sh dev
+
+task-package-docker:
+	@echo "Building packages with Docker..."
+	@./scripts/docker-dev.sh package
